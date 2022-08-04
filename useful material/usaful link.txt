@@ -1,0 +1,22 @@
+Usefull link:
+
+pcap:
+https://docs.rs/pcap/latest/pcap/
+
+pktparse:
+https://docs.rs/pktparse/latest/pktparse/
+
+Ethernet:
+https://it.wikipedia.org/wiki/Frame_Ethernet
+
+IpV4:
+https://en.wikipedia.org/wiki/IPv4#Packet_structure
+
+IpV6:
+https://en.wikipedia.org/wiki/IPv6_packet
+
+Tcp:
+https://it.wikipedia.org/wiki/Transmission_Control_Protocol
+
+Udp:
+https://it.wikipedia.org/wiki/User_Datagram_Protocol
