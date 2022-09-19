@@ -1,13 +1,14 @@
 use std::io::{stdin, stdout, Write};
 use std::ops::Add;
-//use pcap::{Device, Capture, Active};
-use sniffer::{get_available_devices, open_device, start_sniffing};
+use sniffer::{Command, get_available_devices, open_device, start_sniffing};
 
+// cd target/debug per posizionarsi nella cartella corretta
+// sudo ./sniffer per avviare il programma
 
 fn main() {
 
-    let mut n:usize;
-    let time_interval:u64;
+    let mut n: usize;
+    let time_interval: u64;
 
     let mut user_input = String::new();
 
@@ -17,8 +18,8 @@ fn main() {
 
     println!("\n Sono disponibili {} network adapter: ", devices.len());
 
-    let mut i = 0;
-    for dev in &devices{ i+=1; println!("  {}) {}",i, dev.name); }
+    // Stampo la lista dei network adapter
+    devices.iter().enumerate().for_each(|x|println!("  {}) {}",x.0+1, x.1.name));
 
     // Scelta del network adapter
     loop{
@@ -39,6 +40,7 @@ fn main() {
 
     println!("\n Hai scelto {}\n", devices[n-1].name);
 
+    // Apro il network adapter selezionato
     let cap = open_device(devices[n-1].clone(), true)
         .expect("\n Non è stato possibile aprire il socket di rete selezionato\n (Se stai usando linux devi avviare il programma come permessi di amministratore)\n\n");
 
@@ -55,7 +57,6 @@ fn main() {
 
         if res.is_ok() {
             time_interval = res.unwrap();
-            //if time_interval>=100 {break;}
             break;
         }
         println!(" Valore inserito non valido");
@@ -63,7 +64,7 @@ fn main() {
 
     // Scelta output file
 
-    let output_file_name ;
+    let output_file_name: String ;
     user_input.clear();
     print!("\n Scegliere il nome del file in cui salvare l'output\n  >> ");
     stdout().flush().unwrap();
@@ -73,31 +74,28 @@ fn main() {
     println!("\n I report verranno salvati nel file {}", output_file_name);
 
 
-    start_sniffing(cap, output_file_name, time_interval);
+    let verbose_mode = true;
 
+    let res = start_sniffing(cap, output_file_name, time_interval, verbose_mode);
 
+    let sender = res.expect("Errore interno");
 
-    //println!("\n-------------------------------------------------\n Sono in attesa di pacchetti...");
+    println!("\n Il processo di sniffing è iniziato scrivi:
+        - STOP per fermarlo
+        - PAUSE per metterlo in pausa
+        - RESUME per farlo ripartire\n");
+    stdout().flush().unwrap();
 
     loop{
         user_input.clear();
-        print!("\n Il processo di sniffing è iniziato scrivi stop per fermarlo\n  >> ");
-        stdout().flush().unwrap();
+
         stdin().read_line(&mut user_input).unwrap();
-
-        if user_input.trim().eq("stop") { break; }
-        println!(" Valore inserito non valido");
+        if user_input.trim().eq("STOP") { break; }
+        else if user_input.trim().eq("PAUSE") { sender.send(Command::Pause).expect("errore interno"); }
+        else if user_input.trim().eq("RESUME") { sender.send(Command::Resume).expect("errore interno"); }
+        else { println!(" Valore inserito non valido"); }
+        stdout().flush().unwrap();
     }
-
-
-    /*
-    while let Ok(packet) = cap.next() {
-        // Qui dovremo analizzare pacchetto per pacchetto per poi generare il report
-        println!("\n - Ho ricevuto un pacchetto: {:?}", packet.header);
-        let a  = packet.header.ts;
-    }
-
-     */
 
 
 
