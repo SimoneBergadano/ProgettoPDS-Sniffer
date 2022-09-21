@@ -9,6 +9,7 @@ use std::time::Duration;
 use pcap::{Active, Capture, Device, Packet};
 use pktparse::arp::{Operation, parse_arp_pkt};
 use pktparse::ethernet::MacAddress;
+use pktparse::icmp::{IcmpCode, parse_icmp_header};
 use pktparse::ip::IPProtocol;
 use pktparse::ipv4::parse_ipv4_header;
 use pktparse::ipv6::parse_ipv6_header;
@@ -26,7 +27,7 @@ struct Value{
 enum L4Protocol{
     Tcp(u16, u16),
     Udp(u16, u16),
-    Icmp,
+    Icmp(String),
     Igmp,
     Ipv6,
     NotRecognized
@@ -44,6 +45,31 @@ pub enum Command{
     Pause,
     Resume
 }
+
+
+fn string_from_icmpcode(code: IcmpCode) -> String{
+
+let code_name = match code {
+IcmpCode::EchoReply => {"Echo Reply"}
+IcmpCode::Reserved => {"Reserved"}
+IcmpCode::DestinationUnreachable(_) => {"DestinationUnreachable"}
+IcmpCode::SourceQuench => {"SourceQuench"}
+IcmpCode::Redirect(_) => {"Redirect"}
+IcmpCode::EchoRequest => {"EchoRequest"}
+IcmpCode::RouterAdvertisment => {"RouterAdvertisment"}
+IcmpCode::RouterSolicication => {"RouterSolicication"}
+IcmpCode::TimeExceeded(_) => {"TimeExceeded"}
+IcmpCode::ParameterProblem(_) => {"ParameterProblem"}
+IcmpCode::Timestamp => {"Timestamp"}
+IcmpCode::TimestampReply => {"TimestampReply"}
+IcmpCode::ExtendedEchoRequest => {"ExtendedEchoRequest"}
+IcmpCode::ExtendedEchoReply(_) => {"ExtendedEchoReply"}
+IcmpCode::Other(_) => {"Other"}
+};
+    String::from(code_name)
+}
+
+
 
 
 fn hex_from_u8(u: u8) -> Option<char>{
@@ -134,16 +160,19 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
         let tcp_header;
         let udp_header;
 
+        let offset: usize = (4 * ipv4_header.ihl + 14) as usize;
+
         match ipv4_header.protocol{
 
-            IPProtocol::ICMP => {protocol = L4Protocol::Icmp;}
+            IPProtocol::ICMP => {
+                let icmp_header = parse_icmp_header(&p.data[offset..]).expect("Errore analisi header icmp").1;
+                protocol = L4Protocol::Icmp(string_from_icmpcode(icmp_header.code));
+            }
             IPProtocol::TCP => {
-                let offset: usize = (4 * ipv4_header.ihl + 14) as usize;
                 tcp_header = parse_tcp_header(&p.data[offset..]).expect("Errore analisi header tcp").1;
                 protocol = L4Protocol::Tcp(tcp_header.source_port, tcp_header.dest_port);
             }
             IPProtocol::UDP => {
-                let offset: usize = (4 * ipv4_header.ihl + 14) as usize;
                 udp_header = parse_udp_header(&p.data[offset..]).expect("Errore analisi header udp").1;
                 protocol = L4Protocol::Udp(udp_header.source_port, udp_header.dest_port);
             }
@@ -166,23 +195,26 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
         stdout().flush().unwrap();
 
     }
-    // Riconosco un pacchetto IpV4 dal campo EtherType della trama Ethernet
+    // Riconosco un pacchetto IpV6 dal campo EtherType della trama Ethernet
     if p.data[12]==0x86 && p.data[13]==0xDD {
 
         let ipv6_header = parse_ipv6_header(&p.data[14..]).unwrap().1;
 
         let protocol;
 
+        let offset:usize = 36; // ipv6 ha una lunghezza dell'header fissa
+
         match ipv6_header.next_header{
 
-            IPProtocol::ICMP => { protocol = L4Protocol::Icmp; }
+            IPProtocol::ICMP => {
+                let icmp_header = parse_icmp_header(&p.data[offset..]).expect("Errore analisi header icmp").1;
+                protocol = L4Protocol::Icmp(string_from_icmpcode(icmp_header.code));
+            }
             IPProtocol::TCP => {
-                let offset:usize = 36; // ipv6 ha una lunghezza dell'header fissa
                 let tcp_header = parse_tcp_header(&p.data[offset..]).unwrap().1;
                 protocol = L4Protocol::Tcp(tcp_header.source_port, tcp_header.dest_port);
             }
             IPProtocol::UDP => {
-                let offset:usize = 36; // ipv6 ha una lunghezza dell'header fissa
                 let udp_header = parse_udp_header(&p.data[offset..]).unwrap().1;
                 protocol = L4Protocol::Udp(udp_header.source_port, udp_header.dest_port);
             }
@@ -239,7 +271,7 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
         let byte= data.ipv4.get(k).unwrap().bytes_transmitted;
         let num= data.ipv4.get(k).unwrap().packets_number;
 
-        match k.2 {
+        match &k.2 {
             L4Protocol::Tcp(source_port, dest_port) => {
                 write!(&mut *f, "\n
                -source: {},  dest: {}
@@ -258,9 +290,12 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
                        k.0, k.1, "UDP", source_port, dest_port, first_occurrence, last_occurrence, byte, num)
                     .expect("errore interno");
             }
-            L4Protocol::Icmp => {
-                write!(&mut *f, "\n\n -source: {}  dest: {}  trasported_protocol: {}\n  first_occurence: {}  last_occurence: {}\n  byte_trasmitted: {}  packets_number: {},",
-                       k.0, k.1, "ICMP", first_occurrence, last_occurrence, byte, num).expect("errore interno");
+            L4Protocol::Icmp(code) => {
+                write!(&mut *f, "\n
+              -source: {}  dest: {}  trasported_protocol: {} ( {} )
+               first_occurence: {}  last_occurence: {}
+               byte_trasmitted: {}  packets_number: {},",
+                       k.0, k.1, "ICMP", code, first_occurrence, last_occurrence, byte, num).expect("errore interno");
             }
             L4Protocol::Igmp => {
                 write!(&mut *f, "\n\n -source: {}  dest: {}  trasported_protocol: {}\n  first_occurence: {}  last_occurence: {}\n  byte_trasmitted: {}  packets_number: {},",
@@ -286,7 +321,7 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
         let byte= data.ipv6.get(k).unwrap().bytes_transmitted;
         let num= data.ipv6.get(k).unwrap().packets_number;
 
-        match k.2 {
+        match &k.2 {
             L4Protocol::Tcp(source_port, dest_port) => {
                 write!(&mut *f, "\n
                -source: {}  dest: {}
@@ -305,9 +340,12 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
                        k.0, k.1, "UDP", source_port, dest_port, first_occurrence, last_occurrence, byte, num)
                     .expect("errore interno");
             }
-            L4Protocol::Icmp => {
-                write!(&mut *f, "\n\n -source: {}  dest: {}  trasported_protocol: {}\n  first_occurence: {}  last_occurence: {}\n  byte_trasmitted: {}  packets_number: {},",
-                       k.0, k.1, "ICMP", first_occurrence, last_occurrence, byte, num).expect("errore interno");
+            L4Protocol::Icmp(code) => {
+                write!(&mut *f, "\n
+                -source: {}  dest: {}  trasported_protocol: {} ( {} )\
+                first_occurence: {}  last_occurence: {}\
+                byte_trasmitted: {}  packets_number: {},",
+                       k.0, k.1, "ICMP", code, first_occurrence, last_occurrence, byte, num).expect("errore interno");
             }
             L4Protocol::Igmp => {
                 write!(&mut *f, "\n\n -source: {}  dest: {}  trasported_protocol: {}\n  first_occurence: {}  last_occurence: {}\n  byte_trasmitted: {}  packets_number: {},",
@@ -333,7 +371,7 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
         let byte= data.arp.get(k).unwrap().bytes_transmitted;
         let num= data.arp.get(k).unwrap().packets_number;
 
-        write!(&mut *f, "\n\
+        write!(&mut *f, "\n
        -source: {},  dest: {},  tipo: {}
         first_occurence: {},  last_occurence: {}
         byte_trasmitted: {},  packets_number: {},",
