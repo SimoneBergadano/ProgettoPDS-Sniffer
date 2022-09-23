@@ -64,7 +64,7 @@ fn main() {
             (Se stai usando linux devi avviare il programma come permessi di amministratore)\n");
 
 
-    let verbose_mode = true;
+    let verbose_mode = false; // se messa a true stampa tutti gli errori
 
     let res = start_sniffing(cap, input.output, input.time_interval, verbose_mode);
 

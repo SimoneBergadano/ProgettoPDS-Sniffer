@@ -46,7 +46,7 @@ pub enum Command{
     Resume
 }
 
-
+// funzioni di supporto
 fn string_from_icmpcode(code: IcmpCode) -> String{
 
 let code_name = match code {
@@ -68,7 +68,6 @@ IcmpCode::Other(_) => {"Other"}
 };
     String::from(code_name)
 }
-
 fn hex_from_u8(u: u8) -> Option<char>{
     let res;
     match u {
@@ -92,7 +91,6 @@ fn hex_from_u8(u: u8) -> Option<char>{
     }
     res
 }
-
 fn string_from_mac(mac: MacAddress) ->String{
 
     let res = format!("{}{}:{}{}:{}{}:{}{}:{}{}:{}{}",
@@ -107,7 +105,7 @@ fn string_from_mac(mac: MacAddress) ->String{
     res
 }
 
-
+//ottengo la lista dei network adapter
 pub fn get_available_devices() -> Option<Vec<Device>>{
 
     let res;
@@ -121,7 +119,7 @@ pub fn get_available_devices() -> Option<Vec<Device>>{
     res
 }
 
-
+//apre il network adapter
 pub fn open_device(dev: Device, promiscuous_mode: bool) -> Option<Capture<Active>>{
 
     let name = dev.name.clone();
@@ -144,6 +142,7 @@ pub fn open_device(dev: Device, promiscuous_mode: bool) -> Option<Capture<Active
 
 }
 
+// Analizza un pacchetto e lo salva nella struct condivisa data
 fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
 
     let mut data = data.lock().expect("errore interno");
@@ -269,6 +268,7 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
     }
 }
 
+// Legge la struct data e scrive il report su file
 fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
 
     let mut data = data.lock().unwrap();
@@ -310,15 +310,24 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
                        k.0, k.1, "ICMP", code, first_occurrence, last_occurrence, byte, num).expect("errore interno");
             }
             L4Protocol::Igmp => {
-                write!(&mut *f, "\n\n -source: {}  dest: {}  trasported_protocol: {}\n  first_occurence: {}  last_occurence: {}\n  byte_trasmitted: {}  packets_number: {},",
+                write!(&mut *f, "\n
+               -source: {}  dest: {}  trasported_protocol: {}
+                first_occurence: {}  last_occurence: {}
+                byte_trasmitted: {}  packets_number: {},",
                        k.0, k.1, "IGMP", first_occurrence, last_occurrence, byte, num).expect("errore interno");
             }
             L4Protocol::Ipv6 => {
-                write!(&mut *f, "\n\n -source: {}  dest: {}  trasported_protocol: {}\n  first_occurence: {}  last_occurence: {}\n  byte_trasmitted: {}  packets_number: {},",
+                write!(&mut *f, "\n
+               -source: {}  dest: {}  trasported_protocol: {}
+                first_occurence: {}  last_occurence: {}
+                byte_trasmitted: {}  packets_number: {},",
                        k.0, k.1, "IPV6", first_occurrence, last_occurrence, byte, num).expect("errore interno");
             }
             L4Protocol::NotRecognized => {
-                write!(&mut *f, "\n\n -source: {}  dest: {}  trasported_protocol: {}\n  first_occurence: {}  last_occurence: {}\n  byte_trasmitted: {}  packets_number: {},",
+                write!(&mut *f, "\n
+               -source: {}  dest: {}  trasported_protocol: {}
+                first_occurence: {}  last_occurence: {}
+                byte_trasmitted: {}  packets_number: {},",
                        k.0, k.1, "NOT RECOGNIZED", first_occurrence, last_occurrence, byte, num).expect("errore interno");
             }
         }
@@ -354,17 +363,23 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
             }
             L4Protocol::Icmp(code) => {
                 write!(&mut *f, "\n
-                -source: {}  dest: {}  trasported_protocol: {} ( {} )
+               -source: {}  dest: {}  trasported_protocol: {} ( {} )
                 first_occurence: {}  last_occurence: {}
                 byte_trasmitted: {}  packets_number: {},",
                        k.0, k.1, "ICMP", code, first_occurrence, last_occurrence, byte, num).expect("errore interno");
             }
             L4Protocol::Igmp => {
-                write!(&mut *f, "\n\n -source: {}  dest: {}  trasported_protocol: {}\n  first_occurence: {}  last_occurence: {}\n  byte_trasmitted: {}  packets_number: {},",
+                write!(&mut *f, "\n\
+               -source: {}  dest: {}  trasported_protocol: {}\
+                first_occurence: {}  last_occurence: {}\
+                byte_trasmitted: {}  packets_number: {},",
                        k.0, k.1, "IGMP", first_occurrence, last_occurrence, byte, num).expect("errore interno");
             }
             L4Protocol::Ipv6 => {
-                write!(&mut *f, "\n\n -source: {}  dest: {}  trasported_protocol: {}\n  first_occurence: {}  last_occurence: {}\n  byte_trasmitted: {}  packets_number: {},",
+                write!(&mut *f, "\n
+              -source: {}  dest: {}  trasported_protocol: {}
+               first_occurence: {}  last_occurence: {}
+               byte_trasmitted: {}  packets_number: {},",
                        k.0, k.1, "IPV6", first_occurrence, last_occurrence, byte, num).expect("errore interno");
             }
             L4Protocol::NotRecognized => {
@@ -387,18 +402,16 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
         let num= data.arp.get(k).unwrap().packets_number;
 
         write!(&mut *f, "\n
-       -source: {},  dest: {},  tipo: {}
-        first_occurence: {},  last_occurence: {}
-        byte_trasmitted: {},  packets_number: {},",
+               -source: {},  dest: {},  tipo: {}
+                first_occurence: {},  last_occurence: {}
+                byte_trasmitted: {},  packets_number: {},",
                k.0, k.1, k.2, first_occurrence, last_occurrence, byte, num).expect("errore interno");
     });
     data.arp.clear();
 
 }
 
-
-
-
+// funzione che fa partire il processo di cattura e analisi dei pacchetti
 pub fn start_sniffing(mut cap: Capture<Active>, file_name: String, time_interval: u64, verbose_mode: bool) -> Option<Sender<Command>>{
 
     // Utilizzeremo 2 thread che parlano tra loro tramite canali
