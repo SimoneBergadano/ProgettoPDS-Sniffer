@@ -6,5 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pcap = { version = "0.9", features = ["capture-stream"] }
+pcap = "0.10.1"
 pktparse = "0.7.1"
+clap = { version = "3.1.8", features = ["derive"] }

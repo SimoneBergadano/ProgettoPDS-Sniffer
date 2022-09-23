@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::time::Duration;
-use pcap::{Active, Capture, Device, Packet};
+use pcap::{Active, Capture, Device, Error, Packet};
 use pktparse::arp::{Operation, parse_arp_pkt};
 use pktparse::ethernet::MacAddress;
 use pktparse::icmp::{IcmpCode, parse_icmp_header};
@@ -68,9 +68,6 @@ IcmpCode::Other(_) => {"Other"}
 };
     String::from(code_name)
 }
-
-
-
 
 fn hex_from_u8(u: u8) -> Option<char>{
     let res;
@@ -157,23 +154,28 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
         let ipv4_header = parse_ipv4_header(&p.data[14..]).unwrap().1;
 
         let protocol;
-        let tcp_header;
-        let udp_header;
 
         let offset: usize = (4 * ipv4_header.ihl + 14) as usize;
 
         match ipv4_header.protocol{
 
             IPProtocol::ICMP => {
-                let icmp_header = parse_icmp_header(&p.data[offset..]).expect("Errore analisi header icmp").1;
+                let res = parse_icmp_header(&p.data[offset..]);
+                if res.is_err() { return; }
+                let icmp_header = res.unwrap().1;
                 protocol = L4Protocol::Icmp(string_from_icmpcode(icmp_header.code));
             }
             IPProtocol::TCP => {
-                tcp_header = parse_tcp_header(&p.data[offset..]).expect("Errore analisi header tcp").1;
+                let res = parse_tcp_header(&p.data[offset..]);
+                if res.is_err() { return; }
+                let tcp_header = res.unwrap().1;
                 protocol = L4Protocol::Tcp(tcp_header.source_port, tcp_header.dest_port);
+
             }
             IPProtocol::UDP => {
-                udp_header = parse_udp_header(&p.data[offset..]).expect("Errore analisi header udp").1;
+                let res = parse_udp_header(&p.data[offset..]);
+                if res.is_err() { return; }
+                let udp_header = res.unwrap().1;
                 protocol = L4Protocol::Udp(udp_header.source_port, udp_header.dest_port);
             }
             IPProtocol::IGMP => { protocol = L4Protocol::Igmp; }
@@ -183,16 +185,15 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
 
         // Salvo le info del pacchetto ipV4 catturato nella struct data
         data.ipv4.entry((ipv4_header.source_addr, ipv4_header.dest_addr, protocol)).and_modify(|v|{
-            v.last_occurrence = p.header.ts.tv_sec;
+            v.last_occurrence = p.header.ts.tv_sec as i64;
             v.packets_number +=1;
             v.bytes_transmitted += ipv4_header.length as i64;
         }).or_insert(Value{
-            first_occurrence: p.header.ts.tv_sec,
-            last_occurrence: p.header.ts.tv_sec,
+            first_occurrence: p.header.ts.tv_sec as i64,
+            last_occurrence: p.header.ts.tv_sec as i64,
             packets_number: 1,
             bytes_transmitted: ipv4_header.length as i64
         });
-        stdout().flush().unwrap();
 
     }
     // Riconosco un pacchetto IpV6 dal campo EtherType della trama Ethernet
@@ -202,20 +203,26 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
 
         let protocol;
 
-        let offset:usize = 36; // ipv6 ha una lunghezza dell'header fissa
+        let offset: usize = 40; // ipv6 ha una lunghezza dell'header fissa
 
         match ipv6_header.next_header{
 
             IPProtocol::ICMP => {
-                let icmp_header = parse_icmp_header(&p.data[offset..]).expect("Errore analisi header icmp").1;
+                let res = parse_icmp_header(&p.data[offset..]);
+                if res.is_err() { return; }
+                let icmp_header = res.unwrap().1;
                 protocol = L4Protocol::Icmp(string_from_icmpcode(icmp_header.code));
             }
             IPProtocol::TCP => {
-                let tcp_header = parse_tcp_header(&p.data[offset..]).unwrap().1;
+                let res = parse_tcp_header(&p.data[offset..]);
+                if res.is_err() { return; }
+                let tcp_header = res.unwrap().1;
                 protocol = L4Protocol::Tcp(tcp_header.source_port, tcp_header.dest_port);
             }
             IPProtocol::UDP => {
-                let udp_header = parse_udp_header(&p.data[offset..]).unwrap().1;
+                let res = parse_udp_header(&p.data[offset..]);
+                if res.is_err() { return; }
+                let udp_header = res.unwrap().1;
                 protocol = L4Protocol::Udp(udp_header.source_port, udp_header.dest_port);
             }
             _ => { protocol = L4Protocol::NotRecognized; }
@@ -223,12 +230,12 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
 
         // Salvo le info del pacchetto ipV6 catturato nella struct data
         data.ipv6.entry((ipv6_header.source_addr, ipv6_header.dest_addr, protocol)).and_modify(|v|{
-            v.last_occurrence = p.header.ts.tv_sec;
+            v.last_occurrence = p.header.ts.tv_sec as i64;
             v.packets_number +=1;
             v.bytes_transmitted += ipv6_header.length as i64;
         }).or_insert(Value{
-            first_occurrence: p.header.ts.tv_sec,
-            last_occurrence: p.header.ts.tv_sec,
+            first_occurrence: p.header.ts.tv_sec as i64,
+            last_occurrence: p.header.ts.tv_sec as i64,
             packets_number: 1,
             bytes_transmitted: ipv6_header.length as i64
         });
@@ -236,8 +243,13 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
     }
     // Riconosco un pacchetto ARP dal campo EtherType
     if p.data[12]==0x08 && p.data[13]==0x06 {
-        let arp = parse_arp_pkt(&p.data[14..]).unwrap().1;
+
+        let res = parse_arp_pkt(&p.data[14..]);
+        if res.is_err() { return; }
+        let arp = res.unwrap().1;
+
         let operation;
+
         match arp.operation{
             Operation::Request => { operation = "ARP Request"; }
             Operation::Reply => { operation = "ARP Replay"; }
@@ -245,12 +257,12 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
             }
         // Salvo le info del pacchetto ipV6 catturato nella struct data
         data.arp.entry((string_from_mac(arp.src_mac), string_from_mac(arp.dest_mac), operation.to_string())).and_modify(|v|{
-            v.last_occurrence = p.header.ts.tv_sec;
+            v.last_occurrence = p.header.ts.tv_sec as i64;
             v.packets_number +=1;
             v.bytes_transmitted += p.header.len as i64;
         }).or_insert(Value{
-            first_occurrence: p.header.ts.tv_sec,
-            last_occurrence: p.header.ts.tv_sec,
+            first_occurrence: p.header.ts.tv_sec as i64,
+            last_occurrence: p.header.ts.tv_sec as i64,
             packets_number: 1,
             bytes_transmitted: p.header.len as i64
         });
@@ -342,8 +354,8 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
             }
             L4Protocol::Icmp(code) => {
                 write!(&mut *f, "\n
-                -source: {}  dest: {}  trasported_protocol: {} ( {} )\
-                first_occurence: {}  last_occurence: {}\
+                -source: {}  dest: {}  trasported_protocol: {} ( {} )
+                first_occurence: {}  last_occurence: {}
                 byte_trasmitted: {}  packets_number: {},",
                        k.0, k.1, "ICMP", code, first_occurrence, last_occurrence, byte, num).expect("errore interno");
             }
@@ -356,7 +368,10 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
                        k.0, k.1, "IPV6", first_occurrence, last_occurrence, byte, num).expect("errore interno");
             }
             L4Protocol::NotRecognized => {
-                write!(&mut *f, "\n\n -source: {}  dest: {}  trasported_protocol: {}\n  first_occurence: {}  last_occurence: {}\n  byte_trasmitted: {}  packets_number: {},",
+                write!(&mut *f, "\n
+               -source: {}  dest: {}  trasported_protocol: {}
+                first_occurence: {}  last_occurence: {}
+                byte_trasmitted: {}  packets_number: {},",
                        k.0, k.1, "NOT RECOGNIZED", first_occurrence, last_occurrence, byte, num).expect("errore interno");
             }
         }
@@ -399,14 +414,43 @@ pub fn start_sniffing(mut cap: Capture<Active>, file_name: String, time_interval
     // thread raccoglitore e analizzatore di pacchetti
     {
         let data = Arc::clone(&data);
-        thread::spawn(move ||{
+        let analyser_thread = thread::Builder::new()
+            .name("AnalyserThread".into());
+        analyser_thread.spawn(move ||{
             //eprintln!("\n\n (Thread sniffer partito) \n");
-            while let Ok(packet) = cap.next() {
+            loop{
+                let res = cap.next_packet();
+                match res{
+                    Ok(packet) => { packet_analyzer(packet, &data); }
+                    Err(e) => {
+                        match e {
+                            Error::MalformedError(e) => if verbose_mode{ eprintln!("MalformedError: The underlying library returned invalid UTF-8\n ( {:?} )", e); }
+                            Error::InvalidString => if verbose_mode{ eprintln!("InvalidString: The underlying library returned a null string"); }
+                            Error::PcapError(s) => { eprintln!("PcapError: The unerlying library returned an error \n ( {} )\n",s); break; }
+                            Error::InvalidLinktype => if verbose_mode{ eprintln!("InvalidLinktype: The linktype was invalid or unknown"); }
+                            Error::TimeoutExpired => if verbose_mode{ eprintln!("TimeoutExpired: The timeout expired while reading from a live capture"); }
+                            Error::NoMorePackets => { eprintln!("NoMorePackets: No more packets to read from the file"); break; }
+                            Error::NonNonBlock => if verbose_mode{ eprintln!("NonNonBlock: Must be in non-blocking mode to function"); }
+                            Error::InsufficientMemory => { eprintln!("InsufficientMemory: There is not sufficent memory to create a dead capture"); break;}
+                            Error::InvalidInputString => if verbose_mode{ eprintln!("InvalidInputString: An invalid input string (internal null)"); }
+                            Error::IoError(e) => if verbose_mode{ eprintln!("IoError: An IO error occurred\n ( {:?} )", e); }
+                            // Sui sistemi windows InvalidRawFd non esiste
+                            //Error::InvalidRawFd => { eprintln!("InvalidRawFd: An invalid raw file descriptor was provided"); break; }
+                            Error::ErrnoError(e) => if verbose_mode{ eprintln!("ErrnoError\n ( {:?} )", e); }
+                            Error::BufferOverflow => if verbose_mode{ eprintln!("BufferOverflow: Buffer size overflows capacity"); }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            /*
+            while let Ok(packet) = cap.next_packet() {
                 // Qui dovremo analizzare pacchetto per pacchetto per poi generare il report
                 packet_analyzer(packet, &data);
             }
+             */
             println!("Ho smesso di raccogliere pacchetti");
-        });
+        }).expect("Non sono riuscito a lanciare il thread analizzatore");
     }
 
     let (tx, rx) = channel::<Command>();
@@ -416,7 +460,10 @@ pub fn start_sniffing(mut cap: Capture<Active>, file_name: String, time_interval
     {
         let data = Arc::clone(&data);
 
-        thread::spawn(move ||{
+        let report_thread = thread::Builder::new()
+            .name("ReportThread".into());
+
+        report_thread.spawn(move ||{
 
             //println!("\n (Thread report partito) \n");
 
@@ -453,25 +500,15 @@ pub fn start_sniffing(mut cap: Capture<Active>, file_name: String, time_interval
                 report_number+=1;
                 thread::sleep(Duration::from_secs(time_interval));
                 report_writer(report_number, &mut f, data.clone());
-                if verbose_mode { println!("\n - Report#{} disponibile\n", report_number); }
+                println!("\n - Report#{} disponibile\n", report_number);
                 stdout().flush().unwrap();
             }
 
-        });
+        }).expect("Non sono riuscito a lanciare il thread del report");
 
         Some(tx)
     }
 
 
 
-}
-
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
 }
