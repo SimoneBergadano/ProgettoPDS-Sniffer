@@ -1,6 +1,9 @@
+mod sniffer_lib;
+
 use std::env::args;
 use std::io::{stdin, stdout, Write};
-use sniffer::{Command, Filter, get_available_devices, start_sniffing};
+use sniffer_lib::{get_available_devices, start_sniffing};
+
 use clap::Parser;
 
 #[derive(Parser)]
@@ -8,21 +11,28 @@ struct Args {
     adapter: usize,
     time_interval: u64,
     output: String,
-    filter: String
+    filter: String,
 }
 
 fn main() {
 
     let help = "\nUtilizzo del programma:\n
-   ./sniffer <nome adapter> <secondi ogni quanto generare il report> <nome del file per il report>
-   ./sniffer -l o ./sniffer --list per la lista degli adapter
-    DEFAULT per scegliere l'interfaccia di default
+   ./sniffer <numero adapter> <secondi ogni quanto generare il report> <nome del file per il report> <filtri>
+   ./sniffer -l o ./sniffer --list per la lista numerata degli adapter
+
     se stai usando linux lancia il programma con sudo ./sniffer
 
-    ./sniffer 1 10 report.txt ipv4
-    ./sniffer 1 10 report.txt ipv6
-    ./sniffer 1 10 report.txt arp
-    ./sniffer 1 10 report.txt all\n";
+    I filtri vanno inseriti secondo la Berkeley Packet Filter (BPF) syntax
+    https://biot.com/capstats/bpf.html per saperne di più
+
+    Alcuni esempi:
+    ./sniffer 1 10 report.txt all
+    ./sniffer 1 10 report2.txt \"ip\"
+    ./sniffer 1 10 report2.txt \"ip6\"
+    ./sniffer 1 10 report2.txt \"arp\"
+    ./sniffer 1 10 report2.txt \"ip host 192.168.1.1\"
+    ./sniffer 1 10 report2.txt \"tcp src port 80\"
+    \n";
 
     let args: Vec<String> = args().skip(1).collect();
 
@@ -51,7 +61,8 @@ fn main() {
 
     let input: Args = Args::parse();
 
-    println!("comandi ricevuti: \n network adapter: {}\n time_interval: {}\n output file: {}\n filter: {}", input.adapter, input.time_interval, input.output, input.filter);
+    println!("\nComandi ricevuti: \n - network adapter: {}\n - time_interval: {}\n - output file: {}\n - filter: {} \n",
+             input.adapter, input.time_interval, input.output, input.filter);
 
     // Gestire errori
 
@@ -68,31 +79,23 @@ fn main() {
 
     let verbose_mode = false; // se messa a true stampa tutti gli errori
 
+    let filter: Option<String>;
 
-    let filter = match input.filter.to_ascii_lowercase().as_str(){
-        "all" => Filter::All,
-        "ipv4" => Filter::IpV4Only,
-        "ipv6" => Filter::IpV6Only,
-        "arp" => Filter::ArpOnly,
-        _ => Filter::All
-    };
+    match input.filter.as_str() {
+        "all" => filter = None,
+        _ => filter = Some(input.filter),
+    }
 
     let res = start_sniffing(device, input.output, input.time_interval, verbose_mode, filter);
 
     if res.is_err() {
+        println!("E' stato riscontrato un errore: \"{}\" ", res.err().unwrap().to_string());
         //Se stai usando linux devi avviare il programma come permessi di amministrator
-        if cfg!(unix) { println!("Se stai usando linux devi avviare il programma come permessi di amministrator"); }
+        if cfg!(unix) { println!("Reminder: Se stai usando linux devi avviare il programma come permessi di amministrator"); }
         return;
     }
 
-    let sender = res.unwrap();
-
-    match filter{
-        Filter::IpV4Only => { println!("\n Nel report verranno mostrati solo i pacchetti IpV4"); }
-        Filter::IpV6Only => { println!("\n Nel report verranno mostrati solo i pacchetti IpV6"); }
-        Filter::ArpOnly => { println!("\n Nel report verranno mostrati solo i pacchetti ARP"); }
-        Filter::All => {}
-    }
+    let mut sniffer_handler = res.unwrap();
 
     println!("\n Il processo di sniffing è iniziato scrivi:
         - STOP per fermarlo
@@ -106,13 +109,11 @@ fn main() {
         user_input.clear();
 
         stdin().read_line(&mut user_input).unwrap();
-        if user_input.trim().to_ascii_lowercase().eq("stop") { break; }
-        else if user_input.trim().to_ascii_lowercase().eq("pause") { sender.send(Command::Pause).expect("errore interno"); }
-        else if user_input.trim().to_ascii_lowercase().eq("resume") { sender.send(Command::Resume).expect("errore interno"); }
+        if user_input.trim().to_ascii_lowercase().eq("stop") { sniffer_handler.stop(); break; }
+        else if user_input.trim().to_ascii_lowercase().eq("pause") { sniffer_handler.pause(); }
+        else if user_input.trim().to_ascii_lowercase().eq("resume") { sniffer_handler.resume(); }
         else { println!(" Valore inserito non valido"); }
         stdout().flush().unwrap();
     }
-
-
 
 }
