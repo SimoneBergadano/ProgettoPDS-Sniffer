@@ -1,49 +1,48 @@
 # Sniffer Analyzer
 
-Authors: Simone Bergadano, Davide Cosola, Alessio Brescia
+Autori: Simone Bergadano, Davide Cosola, Alessio Brescia
 
-Version: 1.0
+Versione: 1.0
 
 Il progetto mira a
 costruire un'applicazione multipiattaforma in grado di
 di intercettare il traffico in entrata e in uscita attraverso le
 le interfacce di rete di un computer.
 
-// forse meglio non farlo mezzo in inglese mezzo in italiano 😅
-
-## Content
+## Contenuto
 
 - [Sniffer Analyzer](#sniffer-analyzer)
-  - [Content](#content)
+  - [Contenuto](#content)
+  - [Funzionamento](#funzionamento)
   - [Help](#help)
-  - [Main](#main)
-  - [Lib](#lib)
-  - [Moduli Lib](#moduli-lib)
-  - [Analyzer th](#analyzer-th)
-  - [Report th](#report-th)
+  - [main.rs](#mainrs)
+  - [mod.rs](#modrs)
+  - [service_function.rs](#service_functionrs)
+  - [analyzer_th.rs](#analyzer_thrs)
+  - [report_th.rs](#report_thrs)
+  - [command.rs](#commandrs)
 
 ## Funzionamento
 
 **Windows**
-1. Install Npcap.
-2. Download the Npcap SDK.
-3. Add the SDK's /Lib or /Lib/x64 folder to your LIB environment variable
-
+1. Installare Npcap.
+2. Scaricare l'SDK di Npcap.
+3. Aggiungere la cartella /Lib o /Lib/x64 dell'SDK alla variabile d'ambiente LIB.
 
 **MacOs**
 
-libpcap should be installed on Mac OS X by default.
+Libpcap dovrebbe essere già installato su Mac OS X per impostazione predefinita.
 
-Note: A timeout of zero may cause pcap::Capture::next to hang and never return (because it waits for the timeout to expire before returning). This can be fixed by using a non-zero timeout (as the libpcap manual recommends) and calling pcap::Capture::next in a loop.
+Nota: Un timeout pari a zero può far sì che pcap::Capture::next si blocchi e non ritorni mai (perché aspetta che il timeout scada prima di tornare).
+Questo problema può essere risolto utilizzando un timeout diverso da zero (come raccomanda il manuale di libpcap) e chiamando pcap::Capture::next in un ciclo.
 
 **Linux**
 
-Install the libraries and header files for the libpcap library. For example:
+Installare le librerie e i file di intestazione della libreria libpcap:
+- Su Linux basato su Debian: installare libpcap-dev.
+- Su Fedora Linux: installare libpcap-devel.
 
-    On Debian based Linux: install libpcap-dev.
-    On Fedora Linux: install libpcap-devel.
-
-Note: If not running as root, you need to set capabilities like so: sudo setcap cap_net_raw,cap_net_admin=eip path/to/bin
+Nota: se non si esegue come root, è necessario impostare le capabilities come segue: sudo setcap cap_net_raw,cap_net_admin=eip path/to/bin
 
 ## Help
 
@@ -52,31 +51,33 @@ Note: If not running as root, you need to set capabilities like so: sudo setcap 
 - Linux:
   > sudo ./sniffer < ADAPTER > < TIME_INTERVAL > < OUTPUT > < FILTER >
 - Windows:
-  > cargo run < ADAPTER > < TIME_INTERVAL > < OUTPUT > < FILTER >
-  > 
   >./sniffer < ADAPTER > < TIME_INTERVAL > < OUTPUT > < FILTER >
 - Mac:
   > ./sniffer < ADAPTER > < TIME_INTERVAL > < OUTPUT > < FILTER >
-  > 
+
+Nota: l'argomento filtro può essere omesso se non si desidera inserire alcun filtro
+
 **Esempi:**
 
-- > sudo ./sniffer 1 10 report.txt ip
-- > cargo run 1 5 report.txt ip6
-- >./sniffer 1 10 report.txt all
+- > sudo ./sniffer 1 10 report.txt
+- >./sniffer 1 5 report.txt
 - >./sniffer 1 10 report2.txt "ip"
 - >./sniffer 1 10 report2.txt "ip6"
 - >./sniffer 1 10 report2.txt "arp"
 - >./sniffer 1 10 report2.txt "ip host 192.168.1.1"
 - >./sniffer 1 10 report2.txt "tcp src port 80"
 
-//esempio su mac    ./sniffer 1 10 report.txt arp
-
-**Args:**
+**Argomenti:**
 
     < ADAPTER >          Inserisci l'indice dell'adapter da utilizzare
     < TIME_INTERVAL >    Inserisci ogni quanti secondi generare un report
     < OUTPUT >           Inserisci il nome del file di output
-    < FILTER >           Inserisci un filtro per i pacchetti da analizzare secondo la Berkeley Packet Filter (BPF) syntax
+    < FILTER >           Inserisci un filtro per i pacchetti da analizzare secondo la Berkeley Packet Filter (BPF) syntax (link sotto)
+
+<a href="https://biot.com/capstats/bpf.html" target="top">BPF syntax</a>
+
+Nota: l'argomento filtro può essere omesso se non si desidera inserire alcun filtro
+
 
 **Options:**
 
@@ -89,21 +90,27 @@ Il main contiene:
 
 - La gestione degli argomenti ricevuti da linea di comando.
 - Un loop per permettere all'utente di controllare il packet analyzer
+
+      I comandi utilizzabili dall'utente sono:
+        - STOP per fermarlo
+        - PAUSE per metterlo in pausa
+        - RESUME per farlo ripartire
 - Una chiamata alla funzione start_sniffing contenuta in Lib.rs
   
 ## mod.rs
 
-Nel file lib abbiamo utilizzato la libreria pcap per implementare la raccolta dei pacchetti.
+Nel file mod.rs abbiamo utilizzato la libreria pcap per implementare la raccolta dei pacchetti.
 
 **Funzioni presenti:**
 
 - > pub fn get_available_devices() -> Result< Vec< Device >, pcap::Error >
 
-   La funzione ritorna il vettore di device da cui è possibile raccogliere pacchetti.
+   La funzione ritorna il vettore di device da cui è possibile raccogliere pacchetti o un errore in caso l'operazione non vada a buon fine.
 
-- > pub fn start_sniffing(dev: Device, file_name: String, time_interval: u64, verbose_mode: bool, filter: Filter) -> Result< Sender< Command >, pcap::Error>
-  
+- > pub fn start_sniffing(dev: Device, file_name: String, time_interval: u64, verbose_mode: bool, filter: Option<String>) -> Result<SnifferHandler, pcap::Error>
+
    La funzione fa partire il processo di cattura ed analisi dei pacchetti. Al suo interno vengono creati 2 thread. Il primo legge i pacchetti e li elabora, il recondo invece genera i report.
+La funzione ritorna una struct SnifferHandler attraverso la cui è possibile controllare il processo o un errore nel caso non si riesca ad avviare il processo.
 
 ## service_function.rs
 
@@ -133,7 +140,7 @@ Contiene le funzioni utilizzate dal report thread.
 
 **Funzioni presenti:**
 
-- > pub fn report_job(data: &Arc< Mutex< Data>>, file_name: String, time_interval: u64, rx: Receiver< Command>)
+- > pub fn report_job(data: &Arc<Mutex<Data>>, file_name: String, time_interval: u64, rx: Receiver<Command>, filter: Option<String>, dev_name: String)
   
     La funzione fa partire un loop in cui viene gestita un'eventuale pausa da parte dell'utente e chiama la funzione per la scrittura del report (report_writer).
 
@@ -147,4 +154,22 @@ Contiene le funzioni utilizzate dal report thread.
 
 ## command.rs
 
-- > da scrivere
+Contiene gli enum e la struct per gestire lo stato ed i comandi per lo sniffer.
+
+La struct SnifferHandler implementa i metodi:
+
+- > pub fn new(tx_analyser: Sender< Command >, tx_report: Sender< Command >)->Self
+
+    Il metodo new serve per creare la struct SnifferHandler.
+
+- > pub fn pause(&mut self)
+
+    Il metodo pause mette in pausa la stato dello SnifferHandler, oltre fermare l'analisi e la scrittura dei report.
+
+- > pub fn resume(&mut self)
+
+    Il metodo resume serve a mettere ad attivo lo stato dello SnifferHandler ed a far ripartire l'analisi e la scrittura dei report.
+
+- > pub fn stop(&mut self)
+
+    Il metodo serve a terminare definitivamente il processo di cattura.

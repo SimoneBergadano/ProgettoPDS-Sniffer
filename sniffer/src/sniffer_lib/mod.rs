@@ -75,6 +75,8 @@ pub fn start_sniffing(dev: Device, file_name: String, time_interval: u64, verbos
         return Err(e);
     }
 
+    println!("Ho aperto {} con successo", device_name);
+
     let mut cap = cap_res.unwrap();
 
     if filter.is_some(){
@@ -114,7 +116,7 @@ pub fn start_sniffing(dev: Device, file_name: String, time_interval: u64, verbos
         let report_thread = thread::Builder::new()
             .name("ReportThread".into());
 
-        report_thread.spawn(move ||report_job(&data, file_name, time_interval, rx_report, filter))
+        report_thread.spawn(move ||report_job(&data, file_name, time_interval, rx_report, filter, device_name))
             .expect("Non sono riuscito a lanciare il thread del report");
     }
 

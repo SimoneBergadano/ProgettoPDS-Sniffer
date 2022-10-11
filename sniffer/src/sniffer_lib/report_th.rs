@@ -155,14 +155,15 @@ fn command_handler(rx: &Receiver<Command>, time_interval: u64,) -> bool{
     return false; // false significa non terminare il thread
 }
 
-pub fn report_job(data: &Arc<Mutex<Data>>, file_name: String, time_interval: u64, rx: Receiver<Command>, filter: Option<String>){
+pub fn report_job(data: &Arc<Mutex<Data>>, file_name: String, time_interval: u64, rx: Receiver<Command>, filter: Option<String>, dev_name: String){
 
     //println!("\n (Thread report partito) \n");
 
     let mut f = File::create(file_name).expect("Errore scrittura file");
     let mut report_number:usize = 0;
 
-    write!(f, "Viene generato un report ogni {} secondi", time_interval).expect("errore scrittura file");
+    write!(f, "Catturo pacchetti dal network_adapter: {} ", dev_name).expect("errore scrittura file");
+    write!(f, "\nViene generato un report ogni {} secondi", time_interval).expect("errore scrittura file");
 
     if filter.is_some(){
         write!(f, "\nFiltro: \"{}\"", filter.unwrap()).expect("errore scrittura file");

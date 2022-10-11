@@ -11,7 +11,7 @@ struct Args {
     adapter: usize,
     time_interval: u64,
     output: String,
-    filter: String,
+    filter: Option<String>,
 }
 
 fn main() {
@@ -26,7 +26,7 @@ fn main() {
     https://biot.com/capstats/bpf.html per saperne di più
 
     Alcuni esempi:
-    ./sniffer 1 10 report.txt all
+    ./sniffer 1 10 report.txt
     ./sniffer 1 10 report2.txt \"ip\"
     ./sniffer 1 10 report2.txt \"ip6\"
     ./sniffer 1 10 report2.txt \"arp\"
@@ -54,15 +54,15 @@ fn main() {
         return;
     }
 
-    if args.len() < 4 {
+    if args.len() < 3 {
         println!("prova --help per info su come utilizzare il programma");
         return;
     }
 
     let input: Args = Args::parse();
 
-    println!("\nComandi ricevuti: \n - network adapter: {}\n - time_interval: {}\n - output file: {}\n - filter: {} \n",
-             input.adapter, input.time_interval, input.output, input.filter);
+    println!("\nComandi ricevuti: \n - network_adapter: {}\n - time_interval: {}\n - output_file: {}\n - filter: {} \n",
+             input.adapter, input.time_interval, input.output, input.filter.clone().unwrap_or("None".to_string()));
 
     // Gestire errori
 
@@ -79,14 +79,7 @@ fn main() {
 
     let verbose_mode = false; // se messa a true stampa tutti gli errori
 
-    let filter: Option<String>;
-
-    match input.filter.as_str() {
-        "all" => filter = None,
-        _ => filter = Some(input.filter),
-    }
-
-    let res = start_sniffing(device, input.output, input.time_interval, verbose_mode, filter);
+    let res = start_sniffing(device, input.output, input.time_interval, verbose_mode, input.filter);
 
     if res.is_err() {
         println!("E' stato riscontrato un errore: \"{}\" ", res.err().unwrap().to_string());
