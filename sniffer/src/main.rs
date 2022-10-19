@@ -49,7 +49,7 @@ fn main() {
         return;
     }
 
-    if args[0].to_ascii_lowercase().eq("--help"){
+    if args[0].to_ascii_lowercase().eq("--help")||args[0].to_ascii_lowercase().eq("-h"){
         println!("{}", help);
         return;
     }
