@@ -134,7 +134,6 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
 }
 
 fn command_handler(rx: &Receiver<Command>, time_interval: u64,) -> bool{
-    //println!("Il thread report controlla il canale");
     use Command::*;
     let res = rx.try_recv();
     if res.is_ok() {
@@ -172,7 +171,8 @@ pub fn report_job(data: &Arc<Mutex<Data>>, file_name: String, time_interval: u64
     loop{
         report_number+=1;
         thread::sleep(Duration::from_secs(time_interval));
-        { // gestisco larrivo di comandi stop,pause e resume
+        {
+            // gestisco larrivo di comandi stop,pause e resume
             let stop = command_handler(&rx, time_interval);
             if stop { return; }
         }

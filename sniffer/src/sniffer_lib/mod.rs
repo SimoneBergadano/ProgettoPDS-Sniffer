@@ -48,7 +48,7 @@ pub fn get_available_devices() -> Result<Vec<Device>, pcap::Error>{
 // funzione che fa partire il processo di cattura e analisi dei pacchetti
 pub fn start_sniffing(dev: Device, file_name: String, time_interval: u64, verbose_mode: bool, filter: Option<String>) -> Result<SnifferHandler, pcap::Error>{
 
-    // Utilizzeremo 2 thread che parlano tra loro tramite canali
+    // Utilizzeremo 2 thread:
     // Il thread1 legge i pacchetti e li elabora
     // Il thread2 li riceve dal thread1 e genera il report
 
@@ -83,7 +83,7 @@ pub fn start_sniffing(dev: Device, file_name: String, time_interval: u64, verbos
         // http://biot.com/capstats/bpf.html
         let f = filter.clone();
         let res = cap.filter(f.unwrap().as_str(), false);
-        //chiedere se mettere optimizer a true o a false
+
         if res.is_err(){
             println!("Il filtro fornito è risultato errato");
             return Err(res.err().unwrap());

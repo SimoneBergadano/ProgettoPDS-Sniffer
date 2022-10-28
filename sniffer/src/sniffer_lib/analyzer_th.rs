@@ -27,10 +27,7 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
         let protocol;
         let offset: usize = (4 * ipv4_header.ihl + 14) as usize;
 
-        //println!("{:?}", ipv4_header.protocol);
-
         match ipv4_header.protocol{
-
             ICMP => {
                 let res = parse_icmp_header(&p.data[offset..]);
                 if res.is_err() { return; }
@@ -42,7 +39,6 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
                 if res.is_err() { return; }
                 let tcp_header = res.unwrap().1;
                 protocol = L4Protocol::Tcp(tcp_header.source_port, tcp_header.dest_port);
-
             }
             UDP => {
                 let res = parse_udp_header(&p.data[offset..]);
@@ -85,6 +81,7 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
         data.ipv4_count += 1;
 
     }
+
     // Riconosco un pacchetto IpV6 dal campo EtherType della trama Ethernet
     if p.data[12]==0x86 && p.data[13]==0xDD {
 
@@ -95,7 +92,6 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
         let offset: usize = 40; // ipv6 ha una lunghezza dell'header fissa
 
         match ipv6_header.next_header{
-
             ICMP => {
                 let res = parse_icmp_header(&p.data[offset..]);
                 if res.is_err() { return; }
@@ -181,13 +177,11 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
 }
 
 fn command_handler(rx: &Receiver<Command>) -> bool{
-    //println!("Il thread analizzatore controlla il canale");
     use Command::*;
     let res = rx.try_recv();
     if res.is_ok() {
         match res.unwrap(){
             Pause => {
-                //println!("Thread analyzer paused");
                 let res = rx.recv(); // bloccante
                 match res.unwrap() {
                     Pause => { unreachable!("Ho ricevuto pause ma ero già andato in pausa"); }
@@ -232,7 +226,8 @@ pub fn analyzer_job(mut cap: Capture<Active>, data: &Arc<Mutex<Data>>, rx: Recei
             }
         }
 
-        { // gestisco larrivo di comandi stop,pause e resume
+        {
+            // gestisco l'arrivo di comandi stop,pause e resume
             let stop = command_handler(&rx);
             if stop { return; }
         }

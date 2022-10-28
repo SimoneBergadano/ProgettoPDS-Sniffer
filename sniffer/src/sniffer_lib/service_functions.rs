@@ -25,7 +25,6 @@ pub fn string_from_icmpcode(code: IcmpCode) -> String{
     String::from(code_name)
 }
 
-
 pub fn hex_from_u8(u: u8) -> Option<char>{
     let res;
     match u {
@@ -49,7 +48,6 @@ pub fn hex_from_u8(u: u8) -> Option<char>{
     }
     res
 }
-
 
 pub fn string_from_mac(mac: MacAddress) ->String{
 

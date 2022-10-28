@@ -64,8 +64,6 @@ fn main() {
     println!("\nComandi ricevuti: \n - network_adapter: {}\n - time_interval: {}\n - output_file: {}\n - filter: {} \n",
              input.adapter, input.time_interval, input.output, input.filter.clone().unwrap_or("None".to_string()));
 
-    // Gestire errori
-
     let device;
     let adapter = input.adapter;
 
