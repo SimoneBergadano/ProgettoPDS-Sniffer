@@ -25,6 +25,7 @@ pub enum L4Protocol{
     Tcp(u16, u16),
     Udp(u16, u16),
     Icmp(String), // Nella stringa di Icmp scrivo il tipo di Icmp
+    IcmpV6(String), // Nella stringa di Icmp scrivo il tipo di IcmpV6
     Other(String), // Specifico quale pacchetto nella stringa
 }
 

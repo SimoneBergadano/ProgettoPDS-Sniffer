@@ -23,7 +23,9 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
 
         use IPProtocol::*;
 
-        let ipv4_header = parse_ipv4_header(&p.data[14..]).unwrap().1;
+        let res = parse_ipv4_header(&p.data[14..]);
+        if res.is_err() { return; }
+        let ipv4_header = res.unwrap().1;
         let protocol;
         let offset: usize = (4 * ipv4_header.ihl + 14) as usize;
 
@@ -87,9 +89,11 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
 
         use IPProtocol::*;
 
-        let ipv6_header = parse_ipv6_header(&p.data[14..]).unwrap().1;
+        let res = parse_ipv6_header(&p.data[14..]);
+        if res.is_err() { return; }
+        let ipv6_header = res.unwrap().1;
         let protocol;
-        let offset: usize = 40; // ipv6 ha una lunghezza dell'header fissa
+        let offset: usize = 14 + 40; // ipv6 ha una lunghezza dell'header fissa
 
         match ipv6_header.next_header{
             ICMP => {
@@ -97,6 +101,27 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
                 if res.is_err() { return; }
                 let icmp_header = res.unwrap().1;
                 protocol = L4Protocol::Icmp(string_from_icmpcode(icmp_header.code));
+            }
+            ICMP6 => {
+                let icmpv6_type = p.data[offset];
+                let descr = match icmpv6_type{
+                    1 => "Destination Unreachable",
+                    2 => "Packet Too Big",
+                    3 => "Time Exceeded",
+                    4 => "Parameter Problem",
+                    128 => "Echo Request",
+                    129 => "Echo Reply",
+                    130 => "Multicast Listener Query",
+                    131 => "Multicast Listener Report",
+                    132 => "Multicast Listener Done",
+                    133 => "Router Solicitation",
+                    134 => "Router Advertisement",
+                    135 => "Neighbor Solicitation",
+                    136 => "Neighbor Advertisement",
+                    137 => "Redirect Message",
+                    _ => "Altro"
+                };
+                protocol = L4Protocol::IcmpV6(descr.to_string());
             }
             TCP => {
                 let res = parse_tcp_header(&p.data[offset..]);
@@ -126,7 +151,6 @@ fn packet_analyzer(p: Packet, data: &Arc<Mutex<Data>>){
             XNET => { protocol = L4Protocol::Other("XNET".to_string()); }
             CHAOS => { protocol = L4Protocol::Other("CHAOS".to_string()); }
             IPV6 => { protocol = L4Protocol::Other("IPV6 (Tunnel)".to_string()); }
-            ICMP6 => { protocol = L4Protocol::Other("ICMP6".to_string()); }
             Other(_) => { protocol = L4Protocol::Other("Not Recognized".to_string()); }
         }
 

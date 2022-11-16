@@ -49,6 +49,13 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
                byte_trasmitted: {}  packets_number: {},",
                            k.0, k.1, "ICMP", code, first_occurrence, last_occurrence, byte, num).expect("errore interno");
                 }
+                L4Protocol::IcmpV6(descr) => {
+                    write!(&mut *f, "\n
+              -source: {}  dest: {}  trasported_protocol: {} ( {} )
+               first_occurence: {}  last_occurence: {}
+               byte_trasmitted: {}  packets_number: {},",
+                           k.0, k.1, "ICMPV6", descr, first_occurrence, last_occurrence, byte, num).expect("errore interno");
+                }
                 L4Protocol::Other(protocol_name) => {
                     write!(&mut *f, "\n
                -source: {}  dest: {}  trasported_protocol: {}
@@ -95,10 +102,17 @@ fn report_writer(report_number: usize, f: &mut File, data: Arc<Mutex<Data>>){
                 byte_trasmitted: {}  packets_number: {},",
                            k.0, k.1, "ICMP", code, first_occurrence, last_occurrence, byte, num).expect("errore interno");
                 }
+                L4Protocol::IcmpV6(descr) => {
+                    write!(&mut *f, "\n
+              -source: {}  dest: {}  trasported_protocol: {} ( {} )
+               first_occurence: {}  last_occurence: {}
+               byte_trasmitted: {}  packets_number: {},",
+                           k.0, k.1, "ICMPV6", descr, first_occurrence, last_occurrence, byte, num).expect("errore interno");
+                }
                 L4Protocol::Other(protocol_name) => {
                     write!(&mut *f, "\n\
-               -source: {}  dest: {}  trasported_protocol: {}\
-                first_occurence: {}  last_occurence: {}\
+               -source: {}  dest: {}  trasported_protocol: {}
+                first_occurence: {}  last_occurence: {}
                 byte_trasmitted: {}  packets_number: {},",
                            k.0, k.1, protocol_name, first_occurrence, last_occurrence, byte, num).expect("errore interno");
                 }
@@ -140,7 +154,7 @@ fn command_handler(rx: &Receiver<Command>, time_interval: u64,) -> bool{
         match res.unwrap(){
             Pause => {
                 let res = rx.recv(); // bloccante
-                match res.unwrap() {
+                match res.unwrap_or(Stop) {
                     Pause => { unreachable!("Ho ricevuto pause ma ero già andato in pausa"); }
                     Resume => { thread::sleep(Duration::from_secs(time_interval)); }
                     Stop => { println!("Thread report chiuso"); return true; }
